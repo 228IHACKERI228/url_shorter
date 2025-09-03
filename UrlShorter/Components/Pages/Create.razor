@@ -1,0 +1,147 @@
+﻿@page "/create"
+@inject LinkService LinkService
+@inject ISnackbar Snackbar
+@inject NavigationManager NavigationManager
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="my-8">
+    <!-- Заголовок -->
+    <MudPaper Class="pa-4 mb-6" Outlined>
+        <MudText Typo="Typo.h4" Color="Color.Primary" Class="mb-2">
+            <MudIcon Icon="@Icons.Material.Filled.AddLink" Class="mr-2" />
+            Создание сокращённой ссылки
+        </MudText>
+    </MudPaper>
+
+    <!-- Форма создания -->
+    <MudPaper Class="pa-6" Outlined>
+        <EditForm Model="@link" OnValidSubmit="@HandleValidSubmit" OnInvalidSubmit="@HandleInvalidSubmit">
+            <DataAnnotationsValidator />
+            
+            <MudTextField @bind-Value="link.LongUrl" 
+                          Label="Длинный URL" 
+                          Variant="Variant.Outlined" 
+                          Placeholder="https://example.com/very-long-url-path"
+                          HelperText="Введите полный URL адрес"
+                          AdornmentIcon="@Icons.Material.Filled.Link"
+                          Adornment="Adornment.Start"
+                          Required="true"
+                          RequiredError="URL обязателен для заполнения"
+                          Class="mb-4">
+                <ValidationMessage For="@(() => link.LongUrl)" />
+            </MudTextField>
+
+            <!-- Предпросмотр короткой ссылки (после создания) -->
+            @if (!string.IsNullOrEmpty(link.ShortUrl))
+            {
+                <MudAlert Severity="Severity.Success" Class="mb-4" Variant="Variant.Filled">
+                    <MudStack>
+                        <MudText>Ссылка успешно создана!</MudText>
+                        <div class="d-flex align-center">
+                            <MudText Class="mr-2">Ваша короткая ссылка:</MudText>
+                            <MudLink Href="@($"{NavigationManager.BaseUri}r/{link.ShortUrl}")"
+                                     Target="_blank"
+                                     Color="Color.Primary"
+                                     Underline="Underline.Always">
+                                @($"{NavigationManager.BaseUri}r/{link.ShortUrl}")
+                            </MudLink>
+                            <MudIconButton Icon="@Icons.Material.Filled.ContentCopy"
+                                           Color="Color.Inherit"
+                                           Size="Size.Small"
+                                           OnClick="@(() => CopyToClipboard(link.ShortUrl))"
+                                           Class="ml-2" />
+                        </div>
+                    </MudStack>
+                    
+                </MudAlert>
+            }
+
+            <!-- Кнопки действий -->
+            <div class="d-flex justify-end mt-6">
+                <MudButton Variant="Variant.Text" 
+                           Color="Color.Default" 
+                           OnClick="Cancel"
+                           Class="mr-2"
+                           StartIcon="@Icons.Material.Filled.ArrowBack">
+                    Отмена
+                </MudButton>
+                <MudButton Variant="Variant.Filled" 
+                           Color="Color.Primary" 
+                           ButtonType="ButtonType.Submit"
+                           EndIcon="@Icons.Material.Filled.Check"
+                           Disabled="@isLoading">
+                    @if (isLoading)
+                    {
+                        <MudProgressCircular Size="Size.Small" Color="Color.Inherit" Class="mr-2" />
+                    }
+                    Создать
+                </MudButton>
+            </div>
+        </EditForm>
+    </MudPaper>
+
+    <!-- Информационная панель -->
+    <MudPaper Class="pa-4 mt-4" Outlined Color="Color.Info" Style="background: rgba(33, 150, 243, 0.1);">
+        <MudText Typo="Typo.h6" Color="Color.Info" Class="mb-2">
+            <MudIcon Icon="@Icons.Material.Filled.Info" Class="mr-2" />
+            Как это работает?
+        </MudText>
+        <MudText Typo="Typo.body2" Color="Color.Info">
+            • Введите длинный URL в поле выше<br/>
+            • Нажмите "Создать" для генерации короткой ссылки<br/>
+            • Короткая ссылка будет доступна сразу после создания<br/>
+            • Вы можете скопировать её и поделиться с другими
+        </MudText>
+    </MudPaper>
+</MudContainer>
+
+@code {
+    private Link link = new();
+    private bool isLoading = false;
+
+    private async Task HandleValidSubmit()
+    {
+        isLoading = true;
+
+        try
+        {
+            link.ShortUrl = await LinkService.GenerateShortUrlAsync();
+            await LinkService.AddLinkAsync(link);
+
+            Snackbar.Add("Ссылка успешно создана!", Severity.Success);
+
+            // Не перенаправляем сразу, показываем результат на этой же странице
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Ошибка при создании ссылки: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void HandleInvalidSubmit()
+    {
+        Snackbar.Add($"Некорректная ссылка!", Severity.Error);
+    }
+
+    private void Cancel() => NavigationManager.NavigateTo("/");
+
+    private async Task CopyToClipboard(string shortUrl)
+    {
+        var fullUrl = $"{NavigationManager.BaseUri}r/{shortUrl}";
+        try 
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", fullUrl);
+            Snackbar.Add("Ссылка скопирована в буфер обмена", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Ошибка копирования: {ex.Message}", Severity.Error);
+        }
+    }
+
+    [Inject] private IJSRuntime JSRuntime { get; set; } = default!;
+}

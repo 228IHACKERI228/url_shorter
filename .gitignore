@@ -1,0 +1,16 @@
+bin/
+obj/
+.vs/
+.DS_Store
+*.user
+*.suo
+*.userprefs
+*.userosscache
+*.sln.docstates
+*.db
+*.db-shm
+*.db-wal
+/__pycache__/
+/.idea/
+/.vscode/
+/.history/

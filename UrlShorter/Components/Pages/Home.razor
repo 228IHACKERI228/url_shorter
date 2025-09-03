@@ -1,0 +1,183 @@
+﻿@page "/"
+@inject LinkService LinkService
+@inject IDialogService DialogService
+@inject ISnackbar Snackbar
+
+<MudContainer MaxWidth="MaxWidth.Large" Class="my-8">
+    <!-- Заголовок и кнопка добавления -->
+    <MudStack Wrap="Wrap.Wrap" Row Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+        <MudText Typo="Typo.h4" Class="mb-2" Color="Color.Primary">
+            <MudIcon Icon="@Icons.Material.Filled.Link" Class="mr-2" />
+            Сокращённые ссылки
+        </MudText>
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   EndIcon="@Icons.Material.Filled.Add"
+                   OnClick="NavigateToCreate"
+                   Class="mb-2">
+            Добавить новую ссылку
+        </MudButton>
+    </MudStack>
+
+    <!-- Карточка с таблицей -->
+    <MudStack Class="py-1">
+        @if (links == null)
+        {
+            <div class="d-flex justify-center my-8">
+                <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+            </div>
+        }
+        else if (!links.Any())
+        {
+            <MudAlert Severity="Severity.Info" Class="my-4">
+                У вас нет созданных ссылок. Начните с создания вашей первой сокращенной ссылки
+            </MudAlert>
+        }
+        else
+        {
+            <!-- Статистика -->
+            <MudPaper Class="pa-3 mt-4" Outlined Color="Color.Primary" Style="background: rgba(94, 53, 177, 0.1);">
+                <MudGrid>
+                    <MudItem xs="12" sm="4">
+                        <MudText Align="Align.Center">
+                            <MudText Typo="Typo.h6" Color="Color.Primary">@links.Count</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Primary">Всего ссылок</MudText>
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudText Align="Align.Center">
+                            <MudText Typo="Typo.h6" Color="Color.Primary">@links.Sum(l => l.ClickCount)</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Primary">Всего переходов</MudText>
+                        </MudText>
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudText Align="Align.Center">
+                            <MudText Typo="Typo.h6" Color="Color.Primary">@(links.MaxBy(l => l.ClickCount)?.ClickCount ?? 0)</MudText>
+                            <MudText Typo="Typo.body2" Color="Color.Primary">Максимум переходов</MudText>
+                        </MudText>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+
+            <MudTable T="Link" Items="@links" Hover="true" Breakpoint="Breakpoint.Sm" Loading="@(links == null)" Outlined>
+                <HeaderContent>
+                    <MudTh>Длинный URL</MudTh>
+                    <MudTh>Сокращённый URL</MudTh>
+                    <MudTh>Дата создания</MudTh>
+                    <MudTh>Переходы</MudTh>
+                    <MudTh>Действия</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Длинный URL">
+                        <div class="text-truncate" style="max-width: 200px;" title="@context.LongUrl">
+                            <MudLink Href="@context.LongUrl"
+                                     Target="_blank"
+                                     Color="Color.Primary"
+                                     Underline="Underline.Always">
+                                @context.LongUrl
+                            </MudLink>
+                        </div>
+                    </MudTd>
+                    <MudTd DataLabel="Сокращенный URL">
+                        <MudLink Href="@($"{NavigationManager.BaseUri}r/{context.ShortUrl}")"
+                                 Target="_blank"
+                                 Color="Color.Primary"
+                                 Underline="Underline.Always">
+                            @($"{NavigationManager.BaseUri}r/{context.ShortUrl}")
+                        </MudLink>
+                    </MudTd>
+                    <MudTd DataLabel="Дата создания">
+                        @context.CreatedDate.ToLocalTime().ToString("dd.MM.yyyy HH:mm")
+                    </MudTd>
+                    <MudTd DataLabel="Переходы">
+                        <MudChip Color="Color.Primary" Variant="Variant.Filled" Size="Size.Small" T="Link">
+                            @context.ClickCount
+                        </MudChip>
+                    </MudTd>
+                    <MudTd DataLabel="Действия">
+                        <MudIconButton Icon="@Icons.Material.Filled.ContentCopy"
+                                       Color="Color.Primary"
+                                       Size="Size.Small"
+                                       Title="Копировать ссылку"
+                                       OnClick="@(() => CopyToClipboard(context))" />
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                       Color="Color.Error"
+                                       Size="Size.Small"
+                                       Title="Удалить"
+                                       OnClick="@(() => DeleteLink(context.Id))" />
+                    </MudTd>
+                </RowTemplate>
+            </MudTable>
+        }
+    </MudStack>
+</MudContainer>
+
+@code {
+    private List<Link> links = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLinks();
+    }
+
+    private async Task LoadLinks() 
+    {
+        try 
+        {
+            links = await LinkService.GetAllLinksAsync();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Ошибка загрузки данных: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void NavigateToCreate() => NavigationManager.NavigateTo("/create");
+
+    private async Task DeleteLink(int id)
+    {
+        var parameters = new DialogParameters
+        {
+            { "ContentText", "Вы уверены, что хотите удалить эту ссылку? Это действие нельзя отменить." },
+            { "ButtonText", "Удалить" },
+            { "Color", Color.Error }
+        };
+
+        var options = new DialogOptions { CloseButton = true, MaxWidth = MaxWidth.ExtraSmall };
+
+        var dialog = DialogService.Show<MudDialog>("Подтверждение удаления", parameters, options);
+        var result = await dialog.Result;
+
+        if (!result.Canceled)
+        {
+            try 
+            {
+                await LinkService.DeleteLinkAsync(id);
+                await LoadLinks();
+                Snackbar.Add("Ссылка успешно удалена", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Ошибка удаления: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private async Task CopyToClipboard(Link link)
+    {
+        var shortUrl = $"{NavigationManager.BaseUri}r/{link.ShortUrl}";
+        try 
+        {
+            await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", shortUrl);
+            Snackbar.Add("Ссылка скопирована в буфер обмена", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Ошибка копирования: {ex.Message}", Severity.Error);
+        }
+    }
+
+    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+    [Inject] private IJSRuntime JSRuntime { get; set; } = default!;
+}

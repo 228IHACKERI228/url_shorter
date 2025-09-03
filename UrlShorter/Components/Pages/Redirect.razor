@@ -1,0 +1,22 @@
+﻿@page "/r/{ShortUrl}"
+@inject LinkService LinkService
+
+@code {
+    [Parameter] public string ShortUrl { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var link = await LinkService.GetByShortUrlAsync(ShortUrl);
+        if (link != null)
+        {
+            await LinkService.IncrementClickCountAsync(link.Id);
+            NavigationManager.NavigateTo(link.LongUrl, forceLoad: true);
+        }
+        else
+        {
+            NavigationManager.NavigateTo("/");
+        }
+    }
+
+    [Inject] private NavigationManager NavigationManager { get; set; } = default!;
+}
